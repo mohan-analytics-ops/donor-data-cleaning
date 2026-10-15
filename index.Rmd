@@ -1,0 +1,90 @@
+---
+title: "Non-Profit Donor Data Cleanup Report"
+author: "Data Volunteer Portfolio"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+# This hides code warnings and messages from showing up in the final webpage
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(tidyverse)
+```
+
+## 1. Project Overview
+This report demonstrates a reproducible data cleaning pipeline for a fictional non-profit organization. The goal is to take a messy, unformatted spreadsheet of donor records and transform it into a reliable dataset for fundraising reports.
+
+## 2. Generating Messy Sample Data
+First, let's create a simulated "dirty" dataset containing common spreadsheet errors: mixed casing, duplicate records, missing values, and inconsistent formatting.
+
+```{r generate_data}
+# Simulating a messy Excel spreadsheet
+raw_donor_data <- tibble(
+  Donor_ID = c(101, 102, 103, 101, 104, 105),
+  Name = c("john DOE", "Jane Smith", "ALICE BROWN", "john DOE", " Bob Wilson ", "Charlie Green"),
+  Donation_Amount = c("$50.00", "$150", "25.00", "$50.00", NA, "$500.00"),
+  Join_Date = c("2026-01-15", "02/18/2026", "2026-03-01", "2026-01-15", "2026-04-12", "05-22-2026")
+)
+
+# Display the messy raw data
+knitr::kable(raw_donor_data, caption = "Raw, Messy Donor Data Received")
+```
+
+## 3. Data Cleaning Pipeline
+Using R's `tidyverse`, we apply sequential transformations to fix the formatting:
+1. **Deduplication:** Remove identical rows based on `Donor_ID`.
+2. **Text Standardization:** Fix irregular capitalization and strip accidental whitespace from names.
+3. **Numeric Conversion:** Strip currency symbols (`$`) and convert text strings into clean numeric values so calculations are possible.
+
+```{r clean_data}
+cleaned_donor_data <- raw_donor_data %>%
+  # 1. Remove exact duplicate rows
+  distinct(Donor_ID, .keep_all = TRUE) %>%
+  
+  # 2. Fix names (Remove extra spaces and fix capitalization)
+  mutate(Name = str_trim(Name)) %>%
+  mutate(Name = str_to_title(Name)) %>%
+  
+  # 3. Clean donation column
+  mutate(Donation_Amount = str_replace_all(Donation_Amount, fixed("$"), "")) %>%
+  mutate(Donation_Amount = as.numeric(Donation_Amount)) %>%
+  
+  # 4. Fill missing donation amounts with a placeholder 0
+  mutate(Donation_Amount = replace_na(Donation_Amount, 0)) %>%
+  
+  # 5. NEW: Standardize all mixed date formats into YYYY-MM-DD
+  # This tells R to look for Year-Month-Day, Month-Day-Year, or Day-Month-Year combinations automatically!
+  mutate(Join_Date = lubridate::parse_date_time(Join_Date, orders = c("ymd", "mdy", "dmy"))) %>%
+  mutate(Join_Date = as.Date(Join_Date))
+
+# Display the beautifully cleaned data
+knitr::kable(cleaned_donor_data, caption = "Cleaned and Standardized Donor Data")
+```
+## 4. Key Performance Insights
+Now that the data is structured correctly, we can run accurate calculations to report back to the organization's directors.
+
+```{r summary_stats}
+total_raised <- sum(cleaned_donor_data$Donation_Amount)
+avg_donation <- mean(cleaned_donor_data$Donation_Amount[cleaned_donor_data$Donation_Amount > 0])
+```
+
+* **Total Funds Raised:** USD `r total_raised`
+* **Average Active Donation:** USD `r round(avg_donation, 2)`
+
+### Visualizing Donation Distribution
+Below is a visual breakdown of our active donor contributions.
+
+```{r chart, echo=FALSE}
+ggplot(data = filter(cleaned_donor_data, Donation_Amount > 0), aes(x = Name, y = Donation_Amount, fill = Name)) +
+  geom_col(show.legend = FALSE) +
+  theme_minimal() +
+  labs(
+    title = "Campaign Contributions by Donor",
+    x = "Donor Name",
+    y = "Contribution Amount (USD)"
+  )
+```
